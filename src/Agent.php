@@ -436,6 +436,65 @@ class Agent
     }
 
     /**
+     * Generate a response based on existing chat history without requiring a new user message.
+     * Useful for HITL scenarios where the assistant needs to respond after a tool execution.
+     *
+     * @return string|array|\LarAgent\Core\Contracts\DataModel|MessageInterface The agent's response
+     */
+    public function generateFromHistory(): string|array|\LarAgent\Core\Contracts\DataModel|MessageInterface
+    {
+        // Don't reset provider - continue from current state
+        $this->setupBeforeRespond();
+
+        $this->callEvent('onConversationStart');
+
+        $lastException = null;
+
+        // Try current provider and fallback to next providers on failure
+        do {
+            try {
+                if ($this->returnMessage) {
+                    $this->agent->setReturnMessage(true);
+                }
+
+                // Run without adding a new message - use existing history
+                $response = $this->agent->run();
+
+                // Success - proceed with response handling
+                $this->callEvent('onConversationEnd', [$response]);
+
+                if ($this->returnMessage) {
+                    return $response;
+                }
+
+                if ($response instanceof ToolCallMessage) {
+                    return $response->toArrayWithMeta();
+                }
+
+                if (is_array($response)) {
+                    return $this->processArrayResponse($response);
+                }
+
+                return (string) $response;
+            } catch (\Throwable $th) {
+                $this->callEvent('onEngineError', [$th]);
+                $lastException = $th;
+
+                // Try to switch to next provider
+                if ($this->switchToNextProvider()) {
+                    // Re-setup agent with new provider
+                    $this->setupBeforeRespond();
+
+                    continue;
+                }
+
+                // No more providers to try, throw the last exception
+                throw $lastException;
+            }
+        } while (true);
+    }
+
+    /**
      * Process a message and get the agent's response
      *
      * @param  string|null  $message  Optional message to process
