@@ -600,7 +600,7 @@ class LarAgent
 
     // Helper methods
 
-    protected function send(?MessageInterface $message): ?MessageInterface
+    public function send(?MessageInterface $message): ?MessageInterface
     {
         if ($message) {
             $this->chatHistory->addMessage($message);

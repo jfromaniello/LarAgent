@@ -448,6 +448,15 @@ class Agent
 
         $this->callEvent('onConversationStart');
 
+        // Prepare agent with existing chat history (no new message)
+        $this->agent
+            ->withInstructions($this->instructions(), $this->developerRoleForInstructions)
+            ->setTools($this->getTools());
+
+        if ($this->structuredOutput()) {
+            $this->agent->structured($this->structuredOutput());
+        }
+
         $lastException = null;
 
         // Try current provider and fallback to next providers on failure
@@ -457,8 +466,8 @@ class Agent
                     $this->agent->setReturnMessage(true);
                 }
 
-                // Run without adding a new message - use existing history
-                $response = $this->agent->run();
+                // Send without adding a new message - use existing history
+                $response = $this->agent->send(null);
 
                 // Success - proceed with response handling
                 $this->callEvent('onConversationEnd', [$response]);
@@ -484,6 +493,13 @@ class Agent
                 if ($this->switchToNextProvider()) {
                     // Re-setup agent with new provider
                     $this->setupBeforeRespond();
+                    $this->agent
+                        ->withInstructions($this->instructions(), $this->developerRoleForInstructions)
+                        ->setTools($this->getTools());
+
+                    if ($this->structuredOutput()) {
+                        $this->agent->structured($this->structuredOutput());
+                    }
 
                     continue;
                 }
