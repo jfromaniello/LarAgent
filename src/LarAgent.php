@@ -672,7 +672,24 @@ class LarAgent
                 return $response;
             }
 
-            $array = json_decode($response->getContent(), true);
+            $rawContent = $response->getContent();
+
+            // getContent() may return a string, array, or MessageArray object
+            // depending on whether tool calls occurred during the conversation.
+            // After tool loops, the final response content arrives as a MessageArray
+            // object instead of a plain string, causing json_decode to fail.
+            if (is_string($rawContent)) {
+                $array = json_decode($rawContent, true);
+            } elseif (is_array($rawContent)) {
+                $array = $rawContent;
+            } elseif (is_object($rawContent) && method_exists($rawContent, 'toString')) {
+                $array = json_decode($rawContent->toString(), true);
+            } elseif (is_object($rawContent) && method_exists($rawContent, '__toString')) {
+                $array = json_decode((string) $rawContent, true);
+            } else {
+                $array = null;
+            }
+
             // Hook: Before structured output response
             if ($this->processBeforeStructuredOutput($array) === false) {
                 return null;
