@@ -674,20 +674,36 @@ class LarAgent
 
             $rawContent = $response->getContent();
 
-            // getContent() may return a string, array, or MessageArray object
-            // depending on whether tool calls occurred during the conversation.
-            // After tool loops, the final response content arrives as a MessageArray
-            // object instead of a plain string, causing json_decode to fail.
-            if (is_string($rawContent)) {
-                $array = json_decode($rawContent, true);
-            } elseif (is_array($rawContent)) {
-                $array = $rawContent;
-            } elseif (is_object($rawContent) && method_exists($rawContent, 'toString')) {
-                $array = json_decode($rawContent->toString(), true);
-            } elseif (is_object($rawContent) && method_exists($rawContent, '__toString')) {
-                $array = json_decode((string) $rawContent, true);
-            } else {
-                $array = null;
+            // getContent() may return a string, MessageContent, or null depending
+            // on whether tool calls occurred during the conversation.
+            // After tool loops the final response arrives as a MessageContent object
+            // with __toString() rather than a plain string.
+            $contentString = match (true) {
+                is_string($rawContent) => $rawContent,
+                is_object($rawContent) && method_exists($rawContent, '__toString') => (string) $rawContent,
+                is_array($rawContent) => json_encode($rawContent),
+                default => null,
+            };
+
+            $array = $contentString !== null ? json_decode($contentString, true) : null;
+
+            // If json_decode fails (e.g. multiple JSON objects concatenated),
+            // try to extract the first valid JSON object from the string.
+            if ($array === null && is_string($contentString) && str_starts_with(trim($contentString), '{')) {
+                // Find the end of the first JSON object
+                $firstBrace = strpos($contentString, '{');
+                $depth = 0;
+                $inString = false;
+                $escape = false;
+                for ($i = $firstBrace; $i < strlen($contentString); $i++) {
+                    $char = $contentString[$i];
+                    if ($escape) { $escape = false; continue; }
+                    if ($char === '\\') { $escape = true; continue; }
+                    if ($char === '"') { $inString = !$inString; continue; }
+                    if ($inString) continue;
+                    if ($char === '{') $depth++;
+                    if ($char === '}') { $depth--; if ($depth === 0) { $array = json_decode(substr($contentString, $firstBrace, $i - $firstBrace + 1), true); break; } }
+                }
             }
 
             // Hook: Before structured output response
