@@ -612,6 +612,13 @@ class LarAgent
             return null;
         }
 
+        // Register tools in the driver (setTools() only stores them on LarAgent)
+        if (!empty($this->tools)) {
+            foreach ($this->tools as $tool) {
+                $this->driver->registerTool($tool);
+            }
+        }
+
         $response = $this->driver->sendMessage($this->chatHistory->getMessages()->all(), $this->buildConfig());
         // After response (After receiving message from LLM)
         $this->processAfterResponse($response);
